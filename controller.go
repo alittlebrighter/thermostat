@@ -6,92 +6,120 @@ import (
 	"github.com/stianeikeland/go-rpio"
 )
 
-type Control uint8
-
-const (
-	Off Control = iota
-	Fan
-	Heat
-	Cool
-)
-
 const (
 	on  = rpio.Low
 	off = rpio.High
 )
 
-func StartController(heatPin int, coolPin int, fanPin int) (chan Control, error) {
+type ThermoDirection uint8
+
+const (
+	None ThermoDirection = iota
+	Heating
+	Cooling
+)
+
+type Controller struct {
+	fan, heat, cool rpio.Pin
+
+	fanCoolingDown bool
+	fanCancel      chan bool
+	Direction      ThermoDirection
+}
+
+func NewController(heatPin int, coolPin int, fanPin int) (*Controller, error) {
 	err := rpio.Open()
 	if err != nil {
 		return nil, err
 	}
 
-	heat := rpio.Pin(heatPin)
-	cool := rpio.Pin(coolPin)
-	fan := rpio.Pin(fanPin)
+	c := new(Controller)
 
-	heat.Output()
-	cool.Output()
-	fan.Output()
-	fan.Write(off)
-	heat.Write(off)
-	cool.Write(off)
+	c.heat = rpio.Pin(heatPin)
+	c.cool = rpio.Pin(coolPin)
+	c.fan = rpio.Pin(fanPin)
 
-	commands := make(chan Control)
-	fanCancel := make(chan bool)
-	go func() {
-		defer rpio.Close()
-		defer fan.Write(off)
-		defer heat.Write(off)
-		defer cool.Write(off)
+	c.heat.Output()
+	c.cool.Output()
+	c.fan.Output()
 
-		fanCoolingDown := false
+	c.fan.Write(off)
+	c.heat.Write(off)
+	c.cool.Write(off)
 
-		for cmd := range commands {
-			switch cmd {
-			case Off:
-				heat.Write(off)
-				cool.Write(off)
-				go fanCooldown(fan, fanCancel, &fanCoolingDown)
-			case Fan:
-				fan.Write(on)
-				heat.Write(off)
-				cool.Write(off)
-				if fanCoolingDown {
-					fanCancel <- true
-				}
-			case Heat:
-				fan.Write(on)
-				heat.Write(on)
-				cool.Write(off)
-				if fanCoolingDown {
-					fanCancel <- true
-				}
-			case Cool:
-				fan.Write(on)
-				cool.Write(on)
-				heat.Write(off)
-				if fanCoolingDown {
-					fanCancel <- true
-				}
-			}
-		}
-		return
-	}()
+	c.fanCancel = make(chan bool)
 
-	return commands, nil
+	return c, nil
 }
 
-func fanCooldown(fan rpio.Pin, cancel chan bool, coolingDown *bool) {
-	*coolingDown = true
+func (c *Controller) fanCooldown() {
+	c.fanCoolingDown = true
 
 	timer := time.NewTimer(1 * time.Minute)
 	select {
 	case <-timer.C:
-	case <-cancel:
+	case <-c.fanCancel:
 	}
 	timer.Stop()
-	fan.Write(off)
+	c.fan.Write(off)
 
-	*coolingDown = false
+	c.fanCoolingDown = false
+}
+
+func (c *Controller) Off() {
+	c.Direction = None
+
+	c.heat.Write(off)
+	c.cool.Write(off)
+	go c.fanCooldown()
+}
+
+func (c *Controller) Fan() {
+	c.Direction = None
+
+	if c.fanCoolingDown {
+		c.fanCancel <- true
+	}
+
+	c.fan.Write(on)
+	c.heat.Write(off)
+	c.cool.Write(off)
+}
+
+func (c *Controller) Heat() {
+	c.Direction = Heating
+
+	if c.fanCoolingDown {
+		c.fanCancel <- true
+	}
+
+	c.fan.Write(on)
+	c.cool.Write(off)
+	c.heat.Write(on)
+}
+
+func (c *Controller) Cool() {
+	c.Direction = Cooling
+
+	if c.fanCoolingDown {
+		c.fanCancel <- true
+	}
+
+	c.fan.Write(on)
+	c.cool.Write(off)
+	c.heat.Write(on)
+}
+
+func (c *Controller) Shutdown() {
+	c.Direction = None
+
+	if c.fanCoolingDown {
+		c.fanCancel <- true
+	}
+
+	c.cool.Write(off)
+	c.heat.Write(off)
+	c.fan.Write(off)
+
+	rpio.Close()
 }

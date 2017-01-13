@@ -1,14 +1,12 @@
 package main
 
 import (
-//	"bufio"
 	"log"
-//	"os"
 	"time"
 )
 
 const (
-	lowTemp  float64 = 68
+	lowTemp  float64 = 70
 	highTemp         = 80
 
 	tempCheckInterval = 1 * time.Minute
@@ -18,57 +16,84 @@ func TempCToF(tempC float64) float64 {
 	return tempC*9/5 + 32
 }
 
+func TempFToC(tempF float64) float64 {
+	return (tempF - 32) * 5 / 9
+}
+
+type Thermostat struct {
+	lowTemp, highTemp, overshoot, targetTemp float64
+	pollInterval                             time.Duration
+	control                                  *Controller
+	thermometer                              *Thermometer
+}
+
+func NewThermostat(controls *Controller, meter *Thermometer, low, high, overshoot float64) *Thermostat {
+	return &Thermostat{control: controls, thermometer: meter, lowTemp: low, highTemp: high, overshoot: overshoot}
+}
+
+func (stat *Thermostat) ReadTemperature() (float64, error) {
+	temp, err := stat.thermometer.ReadTemperature()
+	if err != nil {
+		return 0, err
+	}
+
+	return TempCToF(temp.CelsiusDeg), nil
+}
+
+func (stat *Thermostat) ProcessTemperatureReading(tempF float64) {
+	log.Printf("Current Temperature (F): %f\n", tempF)
+	switch {
+	case (stat.control.Direction == Heating && tempF > stat.targetTemp) || (stat.control.Direction == Cooling && tempF < stat.targetTemp):
+		log.Println("turning OFF")
+		stat.control.Off()
+	case tempF < stat.lowTemp:
+		log.Println("turning on HEAT")
+		stat.control.Heat()
+		stat.targetTemp = stat.lowTemp + stat.overshoot
+	case tempF > stat.highTemp:
+		log.Println("turning on COOL")
+		stat.control.Cool()
+		stat.targetTemp = stat.highTemp - stat.overshoot
+	default:
+		log.Println("doing NOTHING")
+	}
+}
+
 func main() {
 	log.Println("Starting thermostat.")
 
-	cancel := make(chan bool)
-	/*
-	go func() {
-		reader := bufio.NewReader(os.Stdin)
-		reader.ReadString('\n')
-		log.Println("Received cancel request.")
-		cancel <- true
-		return
-	}()
-	*/
 	log.Println("Setting up controller.")
-	control, err := StartController(16, 20, 21)
+	control, err := NewController(16, 20, 21)
 	if err != nil {
-		close(cancel)
 		log.Fatalln("Error starting controller: " + err.Error())
-		return
 	}
+	defer control.Shutdown()
 
 	log.Println("Starting thermometer.")
-	temperatures, err := StartThermometer(tempCheckInterval, cancel)
+	thermometer, err := NewThermometer()
 	if err != nil {
-		close(control)
-		close(cancel)
 		log.Fatalln("Error starting thermometer: " + err.Error())
-		return
+	}
+	defer thermometer.Shutdown()
+
+	thermostat := NewThermostat(control, thermometer, lowTemp, highTemp, 2)
+
+	tempF, err := thermostat.ReadTemperature()
+	if err != nil {
+		log.Println("Error reading Temperature: " + err.Error())
+	} else {
+		thermostat.ProcessTemperatureReading(tempF)
 	}
 
-	tempTarget := 0.0
-	for temp := range temperatures {
-		tempF := TempCToF(temp.CelsiusDeg)
-		log.Printf("Current temperature: %fF\n", tempF)
-		
-		switch {
-		case tempTarget != 0 && tempF > tempTarget-.5 && tempF < tempTarget +.5:
-			log.Println("turning OFF")
-			control <- Off
-			tempTarget = 0
-		case tempF < lowTemp:
-			log.Println("turning on HEAT")
-			control <- Heat
-			tempTarget = lowTemp + 2
-		case tempF > highTemp:
-			log.Println("turning on COOL")
-			control <- Cool
-			tempTarget = highTemp - 2
-		default:
-			log.Println("doing NOTHING")
+	ticker := time.NewTicker(tempCheckInterval)
+	for {
+		<-ticker.C
+
+		tempF, err := thermostat.ReadTemperature()
+		if err != nil {
+			log.Println("Error reading Temperature: " + err.Error())
+		} else {
+			thermostat.ProcessTemperatureReading(tempF)
 		}
 	}
-	close(control)
 }
