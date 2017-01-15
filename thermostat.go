@@ -1,7 +1,10 @@
 package main
 
 import (
+	"html/template"
 	"log"
+	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -21,14 +24,14 @@ func TempFToC(tempF float64) float64 {
 }
 
 type Thermostat struct {
-	lowTemp, highTemp, overshoot, targetTemp float64
+	LowTemp, HighTemp, overshoot, TargetTemp float64
 	pollInterval                             time.Duration
 	control                                  *Controller
 	thermometer                              *Thermometer
 }
 
 func NewThermostat(controls *Controller, meter *Thermometer, low, high, overshoot float64) *Thermostat {
-	return &Thermostat{control: controls, thermometer: meter, lowTemp: low, highTemp: high, overshoot: overshoot}
+	return &Thermostat{control: controls, thermometer: meter, LowTemp: low, HighTemp: high, overshoot: overshoot}
 }
 
 func (stat *Thermostat) ReadTemperature() (float64, error) {
@@ -43,19 +46,31 @@ func (stat *Thermostat) ReadTemperature() (float64, error) {
 func (stat *Thermostat) ProcessTemperatureReading(tempF float64) {
 	log.Printf("Current Temperature (F): %f\n", tempF)
 	switch {
-	case (stat.control.Direction == Heating && tempF > stat.targetTemp) || (stat.control.Direction == Cooling && tempF < stat.targetTemp):
+	case (stat.control.Direction == Heating && tempF > stat.LowTemp+stat.overshoot) || (stat.control.Direction == Cooling && tempF < stat.HighTemp-stat.overshoot):
 		log.Println("turning OFF")
 		stat.control.Off()
-	case tempF < stat.lowTemp:
+	case tempF < stat.LowTemp:
 		log.Println("turning on HEAT")
 		stat.control.Heat()
-		stat.targetTemp = stat.lowTemp + stat.overshoot
-	case tempF > stat.highTemp:
+	case tempF > stat.HighTemp:
 		log.Println("turning on COOL")
 		stat.control.Cool()
-		stat.targetTemp = stat.highTemp - stat.overshoot
 	default:
 		log.Println("doing NOTHING")
+	}
+}
+
+func (stat *Thermostat) Run() {
+	ticker := time.NewTicker(tempCheckInterval)
+	for {
+		<-ticker.C
+
+		tempF, err := stat.ReadTemperature()
+		if err != nil {
+			log.Println("Error reading Temperature: " + err.Error())
+		} else {
+			stat.ProcessTemperatureReading(tempF)
+		}
 	}
 }
 
@@ -85,15 +100,42 @@ func main() {
 		thermostat.ProcessTemperatureReading(tempF)
 	}
 
-	ticker := time.NewTicker(tempCheckInterval)
-	for {
-		<-ticker.C
+	go thermostat.Run()
 
-		tempF, err := thermostat.ReadTemperature()
-		if err != nil {
-			log.Println("Error reading Temperature: " + err.Error())
-		} else {
-			thermostat.ProcessTemperatureReading(tempF)
+	tmpl, _ := template.New("windowForm").Parse(`<!DOCTYPE html>
+<html>
+<head>
+    <title>Thermostat</title>
+</head>
+<body>
+    <form action="/thermostat/window" method="POST">
+        <input name="low" type="text" value="{{.LowTemp}}" />
+        <input name="high" type="text" value="{{.HighTemp}}" />
+        <button>Submit</button>
+    </form>
+</body>
+</html>`)
+
+	http.HandleFunc("/thermostat/window", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			low, lowErr := strconv.ParseFloat(r.PostFormValue("low"), 64)
+			if lowErr != nil {
+				low = thermostat.LowTemp
+			}
+
+			high, highErr := strconv.ParseFloat(r.PostFormValue("high"), 64)
+			if highErr != nil {
+				high = thermostat.HighTemp
+			}
+
+			log.Printf("Setting new temperature window. Low: %f, High: %f\n", low, high)
+			thermostat.LowTemp = low
+			thermostat.HighTemp = high
 		}
-	}
+
+		tmpl.Execute(w, thermostat)
+	})
+
+	log.Println("Starting web server.")
+	log.Fatal(http.ListenAndServe(":80", nil))
 }
