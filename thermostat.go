@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
@@ -28,19 +30,69 @@ type Thermostat struct {
 	pollInterval                             time.Duration
 	control                                  *Controller
 	thermometer                              *Thermometer
+	Events                                   *RingBuffer
 }
 
 func NewThermostat(controls *Controller, meter *Thermometer, low, high, overshoot float64) *Thermostat {
-	return &Thermostat{control: controls, thermometer: meter, LowTemp: low, HighTemp: high, overshoot: overshoot}
+	return &Thermostat{control: controls, thermometer: meter, LowTemp: low, HighTemp: high, overshoot: overshoot, Events: NewRingBuffer(60)}
+}
+
+type TemperatureReading struct {
+	Temperature float64
+	Units       string
+	Error       string
 }
 
 func (stat *Thermostat) ReadTemperature() (float64, error) {
-	temp, err := stat.thermometer.ReadTemperature()
+	resp, err := http.Get("http://pi2/temperature")
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+
+	tempReading := new(TemperatureReading)
+	err = json.Unmarshal(body, tempReading)
 	if err != nil {
 		return 0, err
 	}
 
-	return TempCToF(temp.CelsiusDeg), nil
+	return TempCToF(tempReading.Temperature), nil
+}
+
+type EventLog struct {
+	AmbientTemperature float64
+	Units              string
+	Direction          ThermoDirection
+}
+
+type RingBuffer struct {
+	buffer []*EventLog
+	index  uint
+}
+
+func NewRingBuffer(size uint) *RingBuffer {
+	return &RingBuffer{buffer: make([]*EventLog, size)}
+}
+
+func (buf *RingBuffer) Add(item *EventLog) {
+	if buf.index == uint(len(buf.buffer)) {
+		buf.index = 0
+	}
+	buf.buffer[buf.index] = item
+	buf.index = buf.index + 1
+}
+
+func (buf *RingBuffer) GetAll() []*EventLog {
+	return append(buf.buffer[buf.index:], buf.buffer[:buf.index]...)
+}
+
+func (buf *RingBuffer) GetLast() *EventLog {
+	if buf.index == 0 {
+		return buf.buffer[len(buf.buffer)-1]
+	}
+
+	return buf.buffer[buf.index-1]
 }
 
 func (stat *Thermostat) ProcessTemperatureReading(tempF float64) {
@@ -58,6 +110,8 @@ func (stat *Thermostat) ProcessTemperatureReading(tempF float64) {
 	default:
 		log.Println("doing NOTHING")
 	}
+
+	stat.Events.Add(&EventLog{AmbientTemperature: tempF, Units: "Fahrenheit", Direction: stat.control.Direction})
 }
 
 func (stat *Thermostat) Run() {
@@ -84,14 +138,7 @@ func main() {
 	}
 	defer control.Shutdown()
 
-	log.Println("Starting thermometer.")
-	thermometer, err := NewThermometer()
-	if err != nil {
-		log.Fatalln("Error starting thermometer: " + err.Error())
-	}
-	defer thermometer.Shutdown()
-
-	thermostat := NewThermostat(control, thermometer, lowTemp, highTemp, 2)
+	thermostat := NewThermostat(control, nil, lowTemp, highTemp, 2)
 
 	tempF, err := thermostat.ReadTemperature()
 	if err != nil {
@@ -108,15 +155,21 @@ func main() {
     <title>Thermostat</title>
 </head>
 <body>
+	<h2>{{.Events.GetLast.AmbientTemperature}}&#176; {{.Events.GetLast.Units}}</h2>
+	<h3 style="text-transform: uppercase;">{{.Events.GetLast.Direction}}</h3>
     <form action="/thermostat/window" method="POST">
-        <input name="low" type="text" value="{{.LowTemp}}" />
+		<label for="high">High Temp</label>
         <input name="high" type="text" value="{{.HighTemp}}" />
+		<br>
+		<label for="low">Low Temp</label>
+        <input name="low" type="text" value="{{.LowTemp}}" />
+		<br>
         <button>Submit</button>
     </form>
 </body>
 </html>`)
 
-	http.HandleFunc("/thermostat/window", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/window", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			low, lowErr := strconv.ParseFloat(r.PostFormValue("low"), 64)
 			if lowErr != nil {
@@ -128,14 +181,17 @@ func main() {
 				high = thermostat.HighTemp
 			}
 
-			log.Printf("Setting new temperature window. Low: %f, High: %f\n", low, high)
-			thermostat.LowTemp = low
-			thermostat.HighTemp = high
+			if low < high {
+				log.Printf("Setting new temperature window. Low: %f, High: %f\n", low, high)
+				thermostat.LowTemp = low
+				thermostat.HighTemp = high
+			}
 		}
+		log.Printf("Last Event: %f, %s", thermostat.Events.GetLast().AmbientTemperature, thermostat.Events.GetLast().Direction.String())
 
 		tmpl.Execute(w, thermostat)
 	})
 
 	log.Println("Starting web server.")
-	log.Fatal(http.ListenAndServe(":80", nil))
+	log.Fatal(http.ListenAndServe("127.0.0.1:9000", nil))
 }

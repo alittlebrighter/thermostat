@@ -4,10 +4,16 @@
     <title>Thermostat</title>
 </head>
 <body>
-    <form action="/thermostat/window"
-        <input name="low" type="text" />
-        <input id="high" type="text" />
-        <button id="submit">Submit</button>
+	<h2>{{.Events.GetLast.AmbientTemperature}}&#176; {{.Events.GetLast.Units}}</h2>
+	<h3 style="text-transform: uppercase;">{{.Events.GetLast.Direction}}</h3>
+    <form action="/thermostat/window" method="POST">
+		<label for="high">High Temp</label>
+        <input name="high" type="text" value="{{.HighTemp}}" />
+		<br>
+		<label for="low">Low Temp</label>
+        <input name="low" type="text" value="{{.LowTemp}}" />
+		<br>
+        <button>Submit</button>
     </form>
 </body>
 </html>

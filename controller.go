@@ -13,6 +13,17 @@ const (
 
 type ThermoDirection uint8
 
+func (d ThermoDirection) String() string {
+	switch d {
+	case Heating:
+		return "heating"
+	case Cooling:
+		return "cooling"
+	default:
+		return "none"
+	}
+}
+
 const (
 	None ThermoDirection = iota
 	Heating
@@ -34,6 +45,7 @@ func NewController(heatPin int, coolPin int, fanPin int) (*Controller, error) {
 	}
 
 	c := new(Controller)
+	c.Direction = None
 
 	c.heat = rpio.Pin(heatPin)
 	c.cool = rpio.Pin(coolPin)
