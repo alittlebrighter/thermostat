@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	lowTemp  float64 = 70
+	lowTemp  float64 = 69
 	highTemp         = 80
+
+	errorTolerance = 3
 
 	tempCheckInterval = 1 * time.Minute
 )
@@ -28,6 +30,7 @@ func TempFToC(tempF float64) float64 {
 type Thermostat struct {
 	LowTemp, HighTemp, overshoot, TargetTemp float64
 	pollInterval                             time.Duration
+	errors                                   uint8
 	control                                  *Controller
 	thermometer                              *Thermometer
 	Events                                   *RingBuffer
@@ -114,6 +117,15 @@ func (stat *Thermostat) ProcessTemperatureReading(tempF float64) {
 	stat.Events.Add(&EventLog{AmbientTemperature: tempF, Units: "Fahrenheit", Direction: stat.control.Direction})
 }
 
+func (stat *Thermostat) HandleError() {
+	stat.errors++
+
+	if stat.errors > errorTolerance {
+		stat.control.Off()
+		stat.errors = 0
+	}
+}
+
 func (stat *Thermostat) Run() {
 	ticker := time.NewTicker(tempCheckInterval)
 	for {
@@ -122,6 +134,7 @@ func (stat *Thermostat) Run() {
 		tempF, err := stat.ReadTemperature()
 		if err != nil {
 			log.Println("Error reading Temperature: " + err.Error())
+			stat.HandleError()
 		} else {
 			stat.ProcessTemperatureReading(tempF)
 		}
