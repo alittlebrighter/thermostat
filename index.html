@@ -8,18 +8,18 @@
 <body>
     <div id="app">
         <h2 style="color:red" v-show="error.length > 0">!!! {{ error }} !!!</h2>
-        <h2>{{ lastEvent.ambientTemperature }}&#176; {{ unitPreference }}</h2>
+        <h2>{{ lastEvent.ambientTemperature }}&#176; {{ thermostat.unitPreference }}</h2>
         <h3 style="text-transform: uppercase;">{{ lastEvent.direction}}</h3>
         
         <div>Modes:</div>
         <ul>
-            <li v-for="mode in modeNames">{{ mode }}: {{ modes[mode].low }}&#176; - {{ modes[mode].high }}&#176;</li>
+            <li v-for="mode in modeNames">{{ mode }}: {{ thermostat.modes[mode].low }}&#176; - {{ thermostat.modes[mode].high }}&#176;</li>
         </ul>
-        <div>Default Mode: {{ defaultMode }}
+        <div>Default Mode: {{ thermostat.defaultMode }}
         
         <div>Schedule</div>
         <ul>
-            <li v-for="spec in schedule">Mode: {{ spec.mode }} from {{ spec.start }} to {{ spec.end }} on Days: {{ spec.days }}</li>
+            <li v-for="spec in thermostat.schedule">Mode: {{ spec.mode }} from {{ spec.start }} to {{ spec.end }} on Days: {{ spec.days }}</li>
         </ul>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/reqwest/2.0.5/reqwest.min.js"></script>
@@ -28,7 +28,7 @@
         var app = new Vue({
             el: "#app",
             data: function () {
-                var viewData = {error: ""};
+                var viewData = {error:"", thermostat: {modes:{},defaultMode:"",schedule:[],overshoot:0,pollInterval:0,maxErrors:0,unitPreference:"",events:{}}};
 
                 reqwest({
                     url: "/thermostat",
@@ -39,8 +39,7 @@
                     success: function (data) {
                         console.log("SUCCESS:", data);
 
-                        viewData = data;
-                        viewData.error = "";
+                        viewData.thermostat = data;
                     },
                     error: function (errMsg) {
                         console.log("ERROR:", errMsg);
@@ -53,14 +52,19 @@
             },
             computed: {
                 lastEvent: function () {
-                    if (this["events"]) {
-                        return this.events[this.events.length - 1];
+                    if (this.thermostat.events && this.thermostat.events.length > 0) {
+                        for (var i = this.thermostat.events.length - 1; i >= 0; i--) {
+                            console.log(this.thermostat.events[i])
+                            if (this.thermostat.events[i] !== null) {
+                                return this.thermostat.events[i];
+                            }
+                        }
                     }
 
                     return {ambientTemperature: "UNKNOWN", direction: "UNKNOWN"};
                 },
                 modeNames: function () {
-                    return Object.keys(this.modes);
+                    return Object.keys(this.thermostat.modes);
                 },
                 dayNames: function () {
                     return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

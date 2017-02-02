@@ -2,20 +2,20 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
 
-	"fmt"
-
 	"github.com/alittlebrighter/thermostat/controller"
 	"github.com/alittlebrighter/thermostat/thermometer"
+	"github.com/alittlebrighter/thermostat/util"
 )
 
 func main() {
 	log.Println("Starting thermostat.")
 
-	config, err := readState("config.yml")
+	config, err := readState("/etc/thermostat.conf")
 	if err != nil {
 		panic(err)
 	}
@@ -25,7 +25,9 @@ func main() {
 	if err != nil {
 		log.Fatalln("Error starting controller: " + err.Error())
 	}
+	control.Off()
 	defer control.Shutdown()
+	defer control.Off()
 
 	log.Println("Getting thermometer.")
 	thermometer, err := thermometer.NewJSONWebService(config.Thermometer.Endpoint)
@@ -39,6 +41,10 @@ func main() {
 	if _, ok := thermostat.Modes[thermostat.DefaultMode]; !ok {
 		log.Fatalln("Invalid default mode.")
 	}
+
+	thermostat.Events = util.NewRingBuffer(60)
+	thermostat.control = control
+	thermostat.thermometer = thermometer
 
 	cancel := make(chan bool)
 	defer close(cancel)
@@ -68,6 +74,9 @@ func main() {
 			thermostat.PollInterval = newThermostat.PollInterval
 			thermostat.Schedule = newThermostat.Schedule
 			thermostat.UnitPreference = newThermostat.UnitPreference
+
+			cancel <- true
+			go thermostat.Run(cancel)
 		}
 
 		err := json.NewEncoder(w).Encode(thermostat)

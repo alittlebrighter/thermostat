@@ -77,16 +77,19 @@ func (stat *Thermostat) CurrentTemperatureWindow(t time.Time) *Window {
 	return stat.Modes[stat.DefaultMode]
 }
 
-func (stat *Thermostat) ProcessTemperatureReading(temp float64, units util.TemperatureUnits) {
-	if units == util.Celsius && stat.UnitPreference != util.Celsius {
-		temp = util.TempCToF(temp)
-	} else if units == util.Fahrenheit && stat.UnitPreference != util.Fahrenheit {
-		temp = util.TempFToC(temp)
+func (stat *Thermostat) ProcessTemperatureReading(ambientTemp float64, units util.TemperatureUnits) {
+	var temp float64
+	if string(units) == string(util.Celsius) && string(stat.UnitPreference) != string(util.Celsius) {
+		temp = util.TempCToF(ambientTemp)
+	} else if string(units) == string(util.Fahrenheit) && string(stat.UnitPreference) != string(util.Fahrenheit) {
+		temp = util.TempFToC(ambientTemp)
+	} else {
+		temp = ambientTemp
 	}
 
 	window := stat.CurrentTemperatureWindow(time.Now())
 
-	log.Printf("Current Temperature (%s): %f\n", stat.UnitPreference[0], temp)
+	log.Printf("Current Temperature (%s): %f, Target: %f to %f", stat.UnitPreference, temp, window.LowTemp, window.HighTemp)
 	switch {
 	case (stat.control.Direction() == controller.Heating && temp > window.LowTemp+stat.Overshoot) || (stat.control.Direction() == controller.Cooling && temp < window.HighTemp-stat.Overshoot):
 		log.Println("turning OFF")

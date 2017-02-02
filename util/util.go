@@ -1,6 +1,7 @@
 package util
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/alittlebrighter/thermostat/controller"
@@ -84,4 +85,8 @@ func (buf *RingBuffer) GetLast() *EventLog {
 	}
 
 	return buf.buffer[buf.index-1]
+}
+
+func (buf *RingBuffer) MarshalJSON() ([]byte, error) {
+	return json.Marshal(buf.buffer)
 }
