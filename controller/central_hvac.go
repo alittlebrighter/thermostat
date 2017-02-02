@@ -1,4 +1,4 @@
-package main
+package controller
 
 import (
 	"time"
@@ -11,41 +11,28 @@ const (
 	off = rpio.High
 )
 
-type ThermoDirection uint8
-
-func (d ThermoDirection) String() string {
-	switch d {
-	case Heating:
-		return "heating"
-	case Cooling:
-		return "cooling"
-	default:
-		return "none"
-	}
-}
-
 const (
 	None ThermoDirection = iota
 	Heating
 	Cooling
 )
 
-type Controller struct {
+type CentralController struct {
 	fan, heat, cool rpio.Pin
 
 	fanCoolingDown bool
 	fanCancel      chan bool
-	Direction      ThermoDirection
+	direction      ThermoDirection
 }
 
-func NewController(heatPin int, coolPin int, fanPin int) (*Controller, error) {
+func NewCentralController(heatPin int, coolPin int, fanPin int) (*CentralController, error) {
 	err := rpio.Open()
 	if err != nil {
 		return nil, err
 	}
 
-	c := new(Controller)
-	c.Direction = None
+	c := new(CentralController)
+	c.direction = None
 
 	c.heat = rpio.Pin(heatPin)
 	c.cool = rpio.Pin(coolPin)
@@ -64,7 +51,11 @@ func NewController(heatPin int, coolPin int, fanPin int) (*Controller, error) {
 	return c, nil
 }
 
-func (c *Controller) fanCooldown() {
+func (c *CentralController) Direction() ThermoDirection {
+	return c.direction
+}
+
+func (c *CentralController) fanCooldown() {
 	c.fanCoolingDown = true
 
 	timer := time.NewTimer(1 * time.Minute)
@@ -78,16 +69,16 @@ func (c *Controller) fanCooldown() {
 	c.fanCoolingDown = false
 }
 
-func (c *Controller) Off() {
-	c.Direction = None
+func (c *CentralController) Off() {
+	c.direction = None
 
 	c.heat.Write(off)
 	c.cool.Write(off)
 	go c.fanCooldown()
 }
 
-func (c *Controller) Fan() {
-	c.Direction = None
+func (c *CentralController) Fan() {
+	c.direction = None
 
 	if c.fanCoolingDown {
 		c.fanCancel <- true
@@ -98,8 +89,8 @@ func (c *Controller) Fan() {
 	c.cool.Write(off)
 }
 
-func (c *Controller) Heat() {
-	c.Direction = Heating
+func (c *CentralController) Heat() {
+	c.direction = Heating
 
 	if c.fanCoolingDown {
 		c.fanCancel <- true
@@ -110,8 +101,8 @@ func (c *Controller) Heat() {
 	c.heat.Write(on)
 }
 
-func (c *Controller) Cool() {
-	c.Direction = Cooling
+func (c *CentralController) Cool() {
+	c.direction = Cooling
 
 	if c.fanCoolingDown {
 		c.fanCancel <- true
@@ -122,8 +113,8 @@ func (c *Controller) Cool() {
 	c.heat.Write(on)
 }
 
-func (c *Controller) Shutdown() {
-	c.Direction = None
+func (c *CentralController) Shutdown() {
+	c.direction = None
 
 	if c.fanCoolingDown {
 		c.fanCancel <- true

@@ -1,0 +1,42 @@
+---
+thermostat:
+  defaultMode: default
+  maxErrors: 3
+  modes:
+    default:
+      high: 80
+      low: 69
+    night:
+      high: 80
+      low: 65
+  overshoot: 2
+  pollInterval: 1
+  schedule:
+  - days:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    end: 7:00AM
+    mode: night
+    start: 12:01AM
+  - days:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    end: 12:00AM
+    mode: night
+    start: 11:00PM
+  unitPreference: Fahrenheit
+controller:
+  pins:
+    fan: 21
+    cool: 20
+    heat: 16
+thermometer:
+  type: remote
+  endpoint: http://pi2/temperature
+serveAt: "127.0.0.1:9000"
