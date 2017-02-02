@@ -8,7 +8,7 @@ Note, there are two thermometer implementations.  One supports an MCP9808 temper
 
 ## Wish list
 - finish comment documentation
-- let user choose thermometer implemntation through configuration
+- let user choose thermometer implementation through configuration
 - more controller implementations
 - multiple thermometer support with the option of area priority in modes (e.g. keep the temperature within the set limits in the living room during the day and focus on the temperature in the bedrooms at night)
 - converge on embd library for GPIO access (it was getting colder and embd wasn't working)
