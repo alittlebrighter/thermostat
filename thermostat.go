@@ -20,10 +20,12 @@ const (
 
 type Thermostat struct {
 	Modes                 `json:"modes"`
-	DefaultMode           string                `json:"defaultMode"`
-	Schedule              []*ScheduleEvent      `json:"schedule"`
-	Overshoot             float64               `json:"overshoot"`
-	PollInterval          int                   `json:"pollInterval"`
+	DefaultMode           string           `json:"defaultMode"`
+	Schedule              []*ScheduleEvent `json:"schedule"`
+	Overshoot             float64          `json:"overshoot"`
+	PollInterval          util.Duration    `json:"pollInterval"`
+	MinFan                util.Duration    `json:"minFan"`
+	lastFan               time.Time
 	MaxErrors, errorCount uint8                 `json:"maxErrors"`
 	UnitPreference        util.TemperatureUnits `json:"unitPreference"`
 	control               controller.Controller
@@ -94,12 +96,16 @@ func (stat *Thermostat) ProcessTemperatureReading(ambientTemp float64, units uti
 	case (stat.control.Direction() == controller.Heating && temp > window.LowTemp+stat.Overshoot) || (stat.control.Direction() == controller.Cooling && temp < window.HighTemp-stat.Overshoot):
 		log.Println("turning OFF")
 		stat.control.Off()
+		stat.lastFan = time.Now()
 	case temp < window.LowTemp:
 		log.Println("turning on HEAT")
 		stat.control.Heat()
 	case temp > window.HighTemp:
 		log.Println("turning on COOL")
 		stat.control.Cool()
+	case time.Since(stat.lastFan) > (time.Duration(1)*time.Hour)-time.Duration(stat.MinFan):
+		log.Println("turning on FAN")
+		stat.lastFan = time.Now().Add(time.Duration(stat.MinFan))
 	default:
 		log.Println("doing NOTHING")
 	}
@@ -117,6 +123,8 @@ func (stat *Thermostat) HandleError() {
 }
 
 func (stat *Thermostat) Run(cancel <-chan bool) {
+	stat.lastFan = time.Now()
+
 	// we want to do something right away
 	temp, units, err := stat.thermometer.ReadTemperature()
 	if err != nil {
@@ -126,7 +134,7 @@ func (stat *Thermostat) Run(cancel <-chan bool) {
 		stat.ProcessTemperatureReading(temp, units)
 	}
 
-	ticker := time.NewTicker(time.Duration(stat.PollInterval) * time.Minute)
+	ticker := time.NewTicker(time.Duration(stat.PollInterval))
 	for {
 		select {
 		case <-ticker.C:

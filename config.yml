@@ -9,8 +9,9 @@ thermostat:
     night:
       high: 80
       low: 65
-  overshoot: 2
-  pollInterval: 1
+  overshoot: 2 # degrees of unitPreference
+  pollInterval: 1m # minutes
+  minFan: 5m # minutes/hour
   schedule:
   - days:
     - 1
