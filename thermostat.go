@@ -9,15 +9,6 @@ import (
 	"github.com/alittlebrighter/thermostat/util"
 )
 
-const (
-	lowTemp  float64 = 69
-	highTemp         = 80
-
-	errorTolerance = 3
-
-	tempCheckInterval = 1 * time.Minute
-)
-
 type Thermostat struct {
 	Modes                 `json:"modes"`
 	DefaultMode           string           `json:"defaultMode"`

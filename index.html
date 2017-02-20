@@ -4,49 +4,118 @@
 <head>
     <title>Thermostat</title>
 </head>
+<style>
+    *,
+    *::before,
+    *::after {
+        box-sizing: border-box;
+    }
+    
+    html {
+        font-size: 100%;
+        font-family: Tahoma, Geneva, Verdana, sans-serif
+    }
+    
+    li {
+        list-style: none;
+    }
+    
+    .half {
+        display: inline-block;
+        width: 49%;
+    }
+    
+    .actions {
+        margin: 10px;
+    }
+</style>
+<link rel="stylesheet" href="/static/css/keen-ui.min.css">
 
 <body>
     <div id="app">
-        <h2 style="color:red" v-show="error.length > 0">!!! {{ error }} !!!</h2>
-        <h2>{{ lastEvent.ambientTemperature }}&#176; {{ thermostat.unitPreference }}</h2>
-        <h3 style="text-transform: uppercase;">{{ lastEvent.direction}}</h3>
-        
-        <div>Modes:</div>
-        <ul>
-            <li v-for="mode in modeNames">{{ mode }}: {{ thermostat.modes[mode].low }}&#176; - {{ thermostat.modes[mode].high }}&#176;</li>
-        </ul>
-        <div>Default Mode: {{ thermostat.defaultMode }}
-        
-        <div>Schedule</div>
-        <ul>
-            <li v-for="spec in thermostat.schedule">Mode: {{ spec.mode }} from {{ spec.start }} to {{ spec.end }} on Days: {{ spec.days }}</li>
-        </ul>
+        <ui-progress-circular v-if="loading" type="indeterminate" color="accent"></ui-progress-circular>
+        <div v-else>
+            <h2 style="color:red" v-show="error.length > 0">!!! {{ error }} !!!</h2>
+            <h2>{{ lastEvent.ambientTemperature.toFixed(1) }}&#176; {{ thermostat.unitPreference }}</h2>
+            <h3 style="text-transform: uppercase;">{{ lastEvent.direction}}</h3>
+            <ui-button @click="refresh" color="primary" class="actions">REFRESH</ui-button>
+            <ui-button @click="save" color="accent" class="actions">Save</ui-button>
+            <ui-tabs type="text">
+                <ui-tab title="Modes">
+                    <ul>
+                        <li v-for="mode in modeNames">
+                            <h4>{{ mode }}:</h4>
+                            <div class="half">
+                                <ui-textbox label="Low" v-model="thermostat.modes[mode].low" type="number"></ui-textbox>
+                            </div> -
+                            <div class="half">
+                                <ui-textbox label="High" v-model="thermostat.modes[mode].high" type="number"></ui-textbox>
+                            </div>
+                        </li>
+                    </ul>
+                    <ui-select label="Default Mode" v-model="thermostat.defaultMode" :options="modeNames"></ui-select>
+                </ui-tab>
+                <ui-tab title="Settings">
+                    <ul>
+                        <ui-textbox label="Poll Interval" v-model="thermostat.pollInterval" type="text"></ui-textbox>
+                        <ui-textbox label="Min. fan time per hour" v-model="thermostat.minFan" type="text"></ui-textbox>
+                        <ui-textbox :label="'Overshoot in degrees ' + thermostat.unitPreference" v-model="thermostat.overshoot" type="number"></ui-textbox>
+                        <ui-textbox label="Max. errors" v-model="thermostat.maxErrors" type="number"></ui-textbox>
+                    </ul>
+                </ui-tab>
+                <ui-tab title="Schedule">
+                    <ul>
+                        <li v-for="spec in thermostat.schedule">Mode: {{ spec.mode }} from {{ spec.start }} to {{ spec.end }} on Days: {{ spec.days }}</li>
+                    </ul>
+                </ui-tab>
+            </ui-tabs>
+        </div>
     </div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/reqwest/2.0.5/reqwest.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.1.10/vue.min.js"></script>
+    <script src="/static/js/reqwest.min.js"></script>
+    <script src="/static/js/vue.min.js"></script>
+    <script src="/static/js/keen-ui.min.js"></script>
     <script>
+        function refresh(viewData) {
+            reqwest({
+                url: "/thermostat/",
+                method: "GET",
+                headers: {
+                    "Accept": "application/json"
+                },
+                success: function (data) {
+                    console.log("SUCCESS:", data);
+
+                    viewData.thermostat = JSON.parse(data);
+                    viewData.loading = false;
+                },
+                error: function (errMsg) {
+                    console.log("ERROR:", errMsg);
+
+                    viewData.error = errMsg;
+                    viewData.loading = false;
+                }
+            });
+        }
+
         var app = new Vue({
             el: "#app",
             data: function () {
-                var viewData = {error:"", thermostat: {modes:{},defaultMode:"",schedule:[],overshoot:0,pollInterval:0,maxErrors:0,unitPreference:"",events:{}}};
-
-                reqwest({
-                    url: "/thermostat",
-                    method: "GET",
-                    headers: {
-                        "Accept": "application/json"
-                    },
-                    success: function (data) {
-                        console.log("SUCCESS:", data);
-
-                        viewData.thermostat = data;
-                    },
-                    error: function (errMsg) {
-                        console.log("ERROR:", errMsg);
-
-                        viewData.error = errMsg;
+                var viewData = {
+                    loading: true,
+                    error: "",
+                    thermostat: {
+                        modes: {},
+                        defaultMode: "",
+                        schedule: [],
+                        overshoot: 0,
+                        pollInterval: 0,
+                        maxErrors: 0,
+                        unitPreference: "",
+                        events: []
                     }
-                });
+                };
+
+                refresh(viewData);
 
                 return viewData;
             },
@@ -54,20 +123,52 @@
                 lastEvent: function () {
                     if (this.thermostat.events && this.thermostat.events.length > 0) {
                         for (var i = this.thermostat.events.length - 1; i >= 0; i--) {
-                            console.log(this.thermostat.events[i])
                             if (this.thermostat.events[i] !== null) {
                                 return this.thermostat.events[i];
                             }
                         }
                     }
 
-                    return {ambientTemperature: "UNKNOWN", direction: "UNKNOWN"};
+                    return {
+                        ambientTemperature: "UNKNOWN",
+                        direction: "UNKNOWN"
+                    };
                 },
                 modeNames: function () {
                     return Object.keys(this.thermostat.modes);
                 },
                 dayNames: function () {
                     return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+                }
+            },
+            methods: {
+                save: function () {
+                    var ctx = this;
+                    delete ctx.thermostat.events;
+
+                    reqwest({
+                        url: "/thermostat/",
+                        method: "POST",
+                        type: "json",
+                        contentType: "application/json",
+                        headers: {
+                            "Accept": "application/json"
+                        },
+                        data: JSON.stringify(ctx.thermostat),
+                        success: function (data) {
+                            console.log("SUCCESS:", data);
+
+                            ctx.thermostat = JSON.parse(data);
+                        },
+                        error: function (errMsg) {
+                            console.log("ERROR:", errMsg);
+
+                            this.error = errMsg.responseText;
+                        }
+                    });
+                },
+                refresh: function () {
+                    refresh(this);
                 }
             }
         })

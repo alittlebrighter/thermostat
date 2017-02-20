@@ -56,7 +56,7 @@ func main() {
 			err := json.NewDecoder(r.Body).Decode(newThermostat)
 			if err != nil {
 				w.WriteHeader(500)
-				fmt.Fprintf(w, "ERROR: could not unmarshal new thermostat configuration.")
+				fmt.Fprintf(w, "ERROR: "+err.Error())
 				return
 			}
 
@@ -72,6 +72,7 @@ func main() {
 			thermostat.Modes = newThermostat.Modes
 			thermostat.Overshoot = newThermostat.Overshoot
 			thermostat.PollInterval = newThermostat.PollInterval
+			thermostat.MinFan = newThermostat.MinFan
 			thermostat.Schedule = newThermostat.Schedule
 			thermostat.UnitPreference = newThermostat.UnitPreference
 
@@ -86,7 +87,7 @@ func main() {
 			return
 		}
 
-		log.Printf("Last Event: %f, %s", thermostat.Events.GetLast().AmbientTemperature, thermostat.Events.GetLast().Direction.String())
+		//log.Printf("Last Event: %f, %s", thermostat.Events.GetLast().AmbientTemperature, thermostat.Events.GetLast().Direction.String())
 	})
 
 	log.Println("Starting web server.")
