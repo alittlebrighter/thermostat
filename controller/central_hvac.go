@@ -11,12 +11,6 @@ const (
 	off = rpio.High
 )
 
-const (
-	None ThermoDirection = iota
-	Heating
-	Cooling
-)
-
 type CentralController struct {
 	fan, heat, cool rpio.Pin
 

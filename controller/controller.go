@@ -11,6 +11,12 @@ type Controller interface {
 
 type ThermoDirection uint8
 
+const (
+	None ThermoDirection = iota
+	Heating
+	Cooling
+)
+
 func (d ThermoDirection) String() string {
 	switch d {
 	case Heating:
@@ -20,4 +26,8 @@ func (d ThermoDirection) String() string {
 	default:
 		return "none"
 	}
+}
+
+func (d ThermoDirection) MarshalText() (text []byte, err error) {
+	return []byte(d.String()), nil
 }
