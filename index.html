@@ -37,7 +37,7 @@
         <div v-else>
             <h2 style="color:red" v-show="error.length > 0">!!! {{ error }} !!!</h2>
             <h2>{{ lastEvent.ambientTemperature.toFixed(1) }}&#176; {{ thermostat.unitPreference }}</h2>
-            <h3 style="text-transform: uppercase;">{{ lastEvent.direction}}</h3>
+            <h3 style="text-transform: uppercase;">{{ lastEvent.direction}}, Last fan run: {{ lastFanFormatted }}</h3>
             <ui-button @click="refresh" color="primary" class="actions">REFRESH</ui-button>
             <ui-button @click="save" color="accent" class="actions">Save</ui-button>
             <ui-tabs type="text">
@@ -83,14 +83,10 @@
                     "Accept": "application/json"
                 },
                 success: function (data) {
-                    console.log("SUCCESS:", data);
-
                     viewData.thermostat = JSON.parse(data);
                     viewData.loading = false;
                 },
                 error: function (errMsg) {
-                    console.log("ERROR:", errMsg);
-
                     viewData.error = errMsg;
                     viewData.loading = false;
                 }
@@ -139,6 +135,19 @@
                 },
                 dayNames: function () {
                     return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+                },
+                lastFanFormatted: function () {
+                    if (!this.thermostat || !this.thermostat.lastFan) {
+                        return "";
+                    }
+
+                    var date = new Date(this.thermostat.lastFan)
+                        , pm = date.getHours() > 12
+                        , hours = pm ? date.getHours() - 12 : date.getHours()
+                        , minutes = date.getMinutes()
+                        , ampm = pm ? "pm" : "am";
+
+                    return hours + ":" + minutes + ampm;
                 }
             },
             methods: {
@@ -156,13 +165,9 @@
                         },
                         data: JSON.stringify(ctx.thermostat),
                         success: function (data) {
-                            console.log("SUCCESS:", data);
-
                             ctx.thermostat = JSON.parse(data);
                         },
                         error: function (errMsg) {
-                            console.log("ERROR:", errMsg);
-
                             this.error = errMsg.responseText;
                         }
                     });

@@ -19,10 +19,15 @@ func readState(path string) (*Config, error) {
 }
 
 func saveState(path string, config *Config) error {
+	events := *config.Thermostat.Events
+	config.Thermostat.Events = nil
+
 	dat, err := yaml.Marshal(config)
 	if err != nil {
 		return err
 	}
+
+	config.Thermostat.Events = &events
 
 	return ioutil.WriteFile(path, dat, os.FileMode(int(0660)))
 }

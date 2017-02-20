@@ -12,10 +12,12 @@ import (
 	"github.com/alittlebrighter/thermostat/util"
 )
 
+const DEFAULT_CONFIG = "/etc/thermostat.conf"
+
 func main() {
 	log.Println("Starting thermostat.")
 
-	config, err := readState("/etc/thermostat.conf")
+	config, err := readState(DEFAULT_CONFIG)
 	if err != nil {
 		panic(err)
 	}
@@ -43,6 +45,7 @@ func main() {
 	}
 
 	thermostat.Events = util.NewRingBuffer(60)
+	thermostat.LastFan = time.Now()
 	thermostat.control = control
 	thermostat.thermometer = thermometer
 
@@ -78,6 +81,7 @@ func main() {
 
 			cancel <- true
 			go thermostat.Run(cancel)
+			go saveState(DEFAULT_CONFIG, config)
 		}
 
 		err := json.NewEncoder(w).Encode(thermostat)

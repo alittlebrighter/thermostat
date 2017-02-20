@@ -15,6 +15,7 @@ const (
 	None ThermoDirection = iota
 	Heating
 	Cooling
+	Fan
 )
 
 func (d ThermoDirection) String() string {
@@ -23,6 +24,8 @@ func (d ThermoDirection) String() string {
 		return "heating"
 	case Cooling:
 		return "cooling"
+	case Fan:
+		return "fan"
 	default:
 		return "none"
 	}

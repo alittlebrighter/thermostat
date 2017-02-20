@@ -72,7 +72,7 @@ func (c *CentralController) Off() {
 }
 
 func (c *CentralController) Fan() {
-	c.direction = None
+	c.direction = Fan
 
 	if c.fanCoolingDown {
 		c.fanCancel <- true
