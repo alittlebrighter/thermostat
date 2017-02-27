@@ -41,14 +41,14 @@ func main() {
 
 	log.Println("Initializing thermostat.")
 	thermostatMain := config.Thermostat
-	if _, ok := thermostat.Modes[thermostat.DefaultMode]; !ok {
+	if _, ok := thermostatMain.Modes[thermostatMain.DefaultMode]; !ok {
 		log.Fatalln("Invalid default mode.")
 	}
 
 	thermostatMain.Events = util.NewRingBuffer(60)
 	thermostatMain.LastFan = time.Now()
-	thermostatMain.control = control
-	thermostatMain.thermometer = thermometer
+	thermostatMain.SetController(control)
+	thermostatMain.SetThermometer(thermometer)
 
 	cancel := make(chan bool)
 	defer close(cancel)
@@ -56,7 +56,7 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
-			newThermostat := new(Thermostat)
+			newThermostat := new(thermostat.Thermostat)
 			err := json.NewDecoder(r.Body).Decode(newThermostat)
 			if err != nil {
 				w.WriteHeader(500)

@@ -50,6 +50,14 @@ type ScheduleEvent struct {
 	End      util.ClockTime `json:"end"`
 }
 
+func (stat *Thermostat) SetController(c controller.Controller) {
+	stat.control = c
+}
+
+func (stat *Thermostat) SetThermometer(t tmeter.Thermometer) {
+	stat.thermometer = t
+}
+
 // CurrentTemperatureWindow calculates what the current desired low and high temperatures should be based
 // on the configured modes and schedule.
 func (stat *Thermostat) CurrentTemperatureWindow(t time.Time) *Window {

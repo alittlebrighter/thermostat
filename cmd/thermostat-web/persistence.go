@@ -1,4 +1,4 @@
-package thermostat
+package main
 
 import (
 	"io/ioutil"
