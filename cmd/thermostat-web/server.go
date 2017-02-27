@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alittlebrighter/thermostat"
 	"github.com/alittlebrighter/thermostat/controller"
 	"github.com/alittlebrighter/thermostat/thermometer"
 	"github.com/alittlebrighter/thermostat/util"
@@ -39,19 +40,19 @@ func main() {
 	defer thermometer.Shutdown()
 
 	log.Println("Initializing thermostat.")
-	thermostat := config.Thermostat
+	thermostatMain := config.Thermostat
 	if _, ok := thermostat.Modes[thermostat.DefaultMode]; !ok {
 		log.Fatalln("Invalid default mode.")
 	}
 
-	thermostat.Events = util.NewRingBuffer(60)
-	thermostat.LastFan = time.Now()
-	thermostat.control = control
-	thermostat.thermometer = thermometer
+	thermostatMain.Events = util.NewRingBuffer(60)
+	thermostatMain.LastFan = time.Now()
+	thermostatMain.control = control
+	thermostatMain.thermometer = thermometer
 
 	cancel := make(chan bool)
 	defer close(cancel)
-	go thermostat.Run(cancel)
+	go thermostatMain.Run(cancel)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
@@ -70,21 +71,21 @@ func main() {
 				return
 			}
 
-			thermostat.DefaultMode = newThermostat.DefaultMode
-			thermostat.MaxErrors = newThermostat.MaxErrors
-			thermostat.Modes = newThermostat.Modes
-			thermostat.Overshoot = newThermostat.Overshoot
-			thermostat.PollInterval = newThermostat.PollInterval
-			thermostat.MinFan = newThermostat.MinFan
-			thermostat.Schedule = newThermostat.Schedule
-			thermostat.UnitPreference = newThermostat.UnitPreference
+			thermostatMain.DefaultMode = newThermostat.DefaultMode
+			thermostatMain.MaxErrors = newThermostat.MaxErrors
+			thermostatMain.Modes = newThermostat.Modes
+			thermostatMain.Overshoot = newThermostat.Overshoot
+			thermostatMain.PollInterval = newThermostat.PollInterval
+			thermostatMain.MinFan = newThermostat.MinFan
+			thermostatMain.Schedule = newThermostat.Schedule
+			thermostatMain.UnitPreference = newThermostat.UnitPreference
 
 			cancel <- true
-			go thermostat.Run(cancel)
+			go thermostatMain.Run(cancel)
 			go saveState(DEFAULT_CONFIG, config)
 		}
 
-		err := json.NewEncoder(w).Encode(thermostat)
+		err := json.NewEncoder(w).Encode(thermostatMain)
 		if err != nil {
 			w.WriteHeader(500)
 			fmt.Fprintf(w, "ERROR: could not marshal thermostat struct.")
@@ -100,31 +101,6 @@ func main() {
 
 // Config defines the configuration needed to run the thermostat.
 type Config struct {
-	Thermostat  *Thermostat
-	Controller  struct{ Pins struct{ Fan, Cool, Heat int } }
-	Thermometer struct{ Type, Endpoint string }
-	ServeAt     string `json:"serveAt"`
-}
-
-// Validate checks that a thermostat has a valid configuration and returns a string explaining any issues.  An empty string denotes a valid configuration.
-func (stat *Thermostat) Validate() string {
-	if _, ok := stat.Modes[stat.DefaultMode]; !ok {
-		return "DefaultMode definition not found!"
-	}
-
-	for key, window := range stat.Modes {
-		if window.LowTemp >= window.HighTemp {
-			return fmt.Sprintf("%s mode is not valid.", key)
-		}
-	}
-
-	for i, spec := range stat.Schedule {
-		if time.Time(spec.Start).Unix() >= time.Time(spec.End).Unix() {
-			return fmt.Sprintf("Schedule entry #%d not valid.", i+1)
-		} else if _, ok := stat.Modes[spec.ModeName]; !ok {
-			return fmt.Sprintf("Schedule entry #%d not valid.", i+1)
-		}
-	}
-
-	return ""
+	thermostat.Config
+	ServeAt string `json:"serveAt"`
 }

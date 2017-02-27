@@ -1,6 +1,7 @@
-package main
+package thermostat
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -8,6 +9,12 @@ import (
 	tmeter "github.com/alittlebrighter/thermostat/thermometer"
 	"github.com/alittlebrighter/thermostat/util"
 )
+
+type Config struct {
+	Thermostat  *Thermostat
+	Controller  struct{ Pins struct{ Fan, Cool, Heat int } }
+	Thermometer struct{ Type, Endpoint string }
+}
 
 // Thermostat is the primary struct that contains all of the data required to operate a smart thermostat system.
 type Thermostat struct {
@@ -160,4 +167,27 @@ func (stat *Thermostat) Run(cancel <-chan bool) {
 			return
 		}
 	}
+}
+
+// Validate checks that a thermostat has a valid configuration and returns a string explaining any issues.  An empty string denotes a valid configuration.
+func (stat *Thermostat) Validate() string {
+	if _, ok := stat.Modes[stat.DefaultMode]; !ok {
+		return "DefaultMode definition not found!"
+	}
+
+	for key, window := range stat.Modes {
+		if window.LowTemp >= window.HighTemp {
+			return fmt.Sprintf("%s mode is not valid.", key)
+		}
+	}
+
+	for i, spec := range stat.Schedule {
+		if time.Time(spec.Start).Unix() >= time.Time(spec.End).Unix() {
+			return fmt.Sprintf("Schedule entry #%d not valid.", i+1)
+		} else if _, ok := stat.Modes[spec.ModeName]; !ok {
+			return fmt.Sprintf("Schedule entry #%d not valid.", i+1)
+		}
+	}
+
+	return ""
 }
