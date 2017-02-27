@@ -98,6 +98,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(config.ServeAt, nil))
 }
 
+// Config defines the configuration needed to run the thermostat.
 type Config struct {
 	Thermostat  *Thermostat
 	Controller  struct{ Pins struct{ Fan, Cool, Heat int } }

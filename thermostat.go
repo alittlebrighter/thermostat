@@ -9,6 +9,7 @@ import (
 	"github.com/alittlebrighter/thermostat/util"
 )
 
+// Thermostat is the primary struct that contains all of the data required to operate a smart thermostat system.
 type Thermostat struct {
 	Modes                 `json:"modes"`
 	DefaultMode           string                `json:"defaultMode"`
@@ -24,13 +25,17 @@ type Thermostat struct {
 	Events                *util.RingBuffer `json:"events"`
 }
 
+// Modes are a collection of Windows referenced by a string label/key
 type Modes map[string]*Window
 
+// Window defines low and high temperatures
 type Window struct {
 	LowTemp  float64 `json:"low"`
 	HighTemp float64 `json:"high"`
 }
 
+// ScheduleEvent defines a block of time from Start to End on the specified Days each week when the specified
+// mode (ModeName) should be applied.
 type ScheduleEvent struct {
 	Days     []time.Weekday `json:"days"`
 	ModeName string         `json:"mode"`
@@ -38,6 +43,8 @@ type ScheduleEvent struct {
 	End      util.ClockTime `json:"end"`
 }
 
+// CurrentTemperatureWindow calculates what the current desired low and high temperatures should be based
+// on the configured modes and schedule.
 func (stat *Thermostat) CurrentTemperatureWindow(t time.Time) *Window {
 	for _, spec := range stat.Schedule {
 		if _, ok := stat.Modes[spec.ModeName]; !ok {
@@ -70,6 +77,8 @@ func (stat *Thermostat) CurrentTemperatureWindow(t time.Time) *Window {
 	return stat.Modes[stat.DefaultMode]
 }
 
+// ProcessTemperatureReading takes a temperature reading and the units the reading was measured at and determines
+// what commands to send to the HVAC controller to keep the temperature inside of the configured range.
 func (stat *Thermostat) ProcessTemperatureReading(ambientTemp float64, units util.TemperatureUnits) {
 	var temp float64
 	if string(units) == string(util.Celsius) && string(stat.UnitPreference) != string(util.Celsius) {
@@ -84,16 +93,19 @@ func (stat *Thermostat) ProcessTemperatureReading(ambientTemp float64, units uti
 
 	log.Printf("Current Temperature (%s): %f, Target: %f to %f", stat.UnitPreference, temp, window.LowTemp, window.HighTemp)
 	switch {
-	case (stat.control.Direction() == controller.Heating && temp > window.LowTemp+stat.Overshoot) || (stat.control.Direction() == controller.Cooling && temp < window.HighTemp-stat.Overshoot):
+	case (stat.control.Direction() == controller.Heating && temp > window.LowTemp+stat.Overshoot) ||
+		(stat.control.Direction() == controller.Cooling && temp < window.HighTemp-stat.Overshoot):
 		log.Println("turning OFF")
 		stat.control.Off()
 		stat.LastFan = time.Now()
 	case temp < window.LowTemp:
 		log.Println("turning on HEAT")
 		stat.control.Heat()
+		stat.LastFan = time.Now()
 	case temp > window.HighTemp:
 		log.Println("turning on COOL")
 		stat.control.Cool()
+		stat.LastFan = time.Now()
 	case time.Duration(stat.MinFan).Nanoseconds() > 0 &&
 		time.Since(stat.LastFan) > (time.Duration(1)*time.Hour)-time.Duration(stat.MinFan):
 		log.Println("turning on FAN")
@@ -111,6 +123,8 @@ func (stat *Thermostat) ProcessTemperatureReading(ambientTemp float64, units uti
 	stat.Events.Add(&util.EventLog{AmbientTemperature: temp, Units: stat.UnitPreference, Direction: stat.control.Direction()})
 }
 
+// HandleError manages errors received from temperature readings to make sure the system does not stay on in the event of
+// not being able to acquire a temperature reading.
 func (stat *Thermostat) HandleError() {
 	stat.errorCount++
 
@@ -120,6 +134,7 @@ func (stat *Thermostat) HandleError() {
 	}
 }
 
+// Run starts the main event loop to run the thermostat.
 func (stat *Thermostat) Run(cancel <-chan bool) {
 	// we want to do something right away
 	temp, units, err := stat.thermometer.ReadTemperature()
@@ -138,9 +153,9 @@ func (stat *Thermostat) Run(cancel <-chan bool) {
 			if err != nil {
 				log.Println("Error reading Temperature: " + err.Error())
 				stat.HandleError()
-			} else {
-				stat.ProcessTemperatureReading(temp, units)
+				continue
 			}
+			stat.ProcessTemperatureReading(temp, units)
 		case <-cancel:
 			return
 		}

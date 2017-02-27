@@ -1,5 +1,6 @@
 package controller
 
+// Controller defines a struct that is capable of performing all of the necessary actions to change the temperature.
 type Controller interface {
 	Direction() ThermoDirection
 	Off()
@@ -9,6 +10,7 @@ type Controller interface {
 	Shutdown()
 }
 
+// ThermoDirection defines what a controller is currently doing.
 type ThermoDirection uint8
 
 const (
