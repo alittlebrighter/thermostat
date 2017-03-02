@@ -18,3 +18,8 @@ Note, there are two thermometer implementations.  One supports an MCP9808 temper
 
 ## Contributing
 I'd be more than happy to accept pull requests that implement any of the stated objectives in the road map or even features I may not have thought of.  Just try to match the style or make a case for why my style is wrong.
+
+## License
+Mozilla Public License v2.0
+[TLDR](https://tldrlegal.com/license/mozilla-public-license-2.0-(mpl-2))
+[Full License](https://www.mozilla.org/en-US/MPL/2.0/)
