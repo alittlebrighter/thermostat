@@ -108,8 +108,12 @@ func (stat *Thermostat) ProcessTemperatureReading(ambientTemp float64, units uti
 
 	log.Printf("Current Temperature (%s): %f, Target: %f to %f", stat.UnitPreference, temp, window.LowTemp, window.HighTemp)
 	switch {
-	case (stat.control.Direction() == controller.Heating && temp > window.LowTemp+stat.Overshoot) ||
-		(stat.control.Direction() == controller.Cooling && temp < window.HighTemp-stat.Overshoot):
+	case (stat.control.Direction() == controller.Heating && temp > window.LowTemp+stat.Overshoot) /* done heating */ ||
+		(stat.control.Direction() == controller.Cooling && temp < window.HighTemp-stat.Overshoot) /* done cooling */ ||
+		(time.Duration(stat.MinFan).Nanoseconds() > 0 &&
+			stat.control.Direction() == controller.Fan &&
+			time.Since(stat.LastFan) > 0 &&
+			time.Since(stat.LastFan) <= (time.Duration(1)*time.Hour)-time.Duration(stat.MinFan)) /* done running fan */ :
 		log.Println("turning OFF")
 		stat.control.Off()
 		stat.LastFan = time.Now()
@@ -126,11 +130,6 @@ func (stat *Thermostat) ProcessTemperatureReading(ambientTemp float64, units uti
 		log.Println("turning on FAN")
 		stat.control.Fan()
 		stat.LastFan = time.Now().Add(time.Duration(stat.MinFan))
-	case time.Duration(stat.MinFan).Nanoseconds() > 0 &&
-		time.Since(stat.LastFan) > 0 &&
-		time.Since(stat.LastFan) <= (time.Duration(1)*time.Hour)-time.Duration(stat.MinFan):
-		log.Println("turning OFF")
-		stat.control.Off()
 	default:
 		log.Println("doing NOTHING")
 	}
