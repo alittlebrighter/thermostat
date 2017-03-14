@@ -56,12 +56,12 @@
                     <ui-select label="Default Mode" v-model="thermostat.defaultMode" :options="modeNames"></ui-select>
                 </ui-tab>
                 <ui-tab title="Settings">
-                    <ul>
-                        <ui-textbox label="Poll Interval" v-model="thermostat.pollInterval" type="text"></ui-textbox>
+                        <ui-textbox label="Poll Interval" v-model="th<ul>
+                        <li v-for="spec in thermostat.schedule">Mode: {{ spec.mode }} from {{ spec.start }} to {{ spec.end }} on Days: {{ spec.days }}</li>
+                    </ul>ermostat.pollInterval" type="text"></ui-textbox>
                         <ui-textbox label="Min. fan time per hour" v-model="thermostat.minFan" type="text"></ui-textbox>
                         <ui-textbox :label="'Overshoot in degrees ' + thermostat.unitPreference" v-model="thermostat.overshoot" type="number"></ui-textbox>
                         <ui-textbox label="Max. errors" v-model="thermostat.maxErrors" type="number"></ui-textbox>
-                    </ul>
                 </ui-tab>
                 <ui-tab title="Schedule">
                     <ul>
@@ -111,9 +111,12 @@
                     }
                 };
 
-                refresh(viewData);
-
                 return viewData;
+            },
+            mounted () {
+                this.$nextTick(() => {
+                  refresh();
+                })
             },
             computed: {
                 lastEvent: function () {
