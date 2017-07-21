@@ -114,8 +114,8 @@ func (c *CentralController) Cool() {
 	}
 
 	c.fan.Write(on)
-	c.cool.Write(off)
-	c.heat.Write(on)
+	c.cool.Write(on)
+	c.heat.Write(off)
 }
 
 // Shutdown turns off all HVAC components and closes the GPIO connection.

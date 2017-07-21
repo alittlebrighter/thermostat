@@ -33,7 +33,7 @@ func main() {
 	defer control.Off()
 
 	log.Println("Getting thermometer.")
-	thermometer, err := thermometer.NewJSONWebService(config.Thermometer.Endpoint)
+	thermometer, err := thermometer.NewRemote(config.Thermometer.Endpoint)
 	if err != nil {
 		log.Fatalln("Error getting thermometer instance: " + err.Error())
 	}
@@ -54,7 +54,20 @@ func main() {
 	defer close(cancel)
 	go thermostatMain.Run(cancel)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/", CORSFilterFactory(ConfigHandlerFactory(thermostatMain, config, cancel)))
+
+	log.Println("Starting web server.")
+	log.Fatal(http.ListenAndServe(config.ServeAt, nil))
+}
+
+// Config defines the configuration needed to run the thermostat.
+type Config struct {
+	thermostat.Config
+	ServeAt string `json:"serveAt"`
+}
+
+func ConfigHandlerFactory(thermostatMain *thermostat.Thermostat, config *Config, cancel chan bool) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			newThermostat := new(thermostat.Thermostat)
 			err := json.NewDecoder(r.Body).Decode(newThermostat)
@@ -92,15 +105,21 @@ func main() {
 			return
 		}
 
-		//log.Printf("Last Event: %f, %s", thermostat.Events.GetLast().AmbientTemperature, thermostat.Events.GetLast().Direction.String())
-	})
-
-	log.Println("Starting web server.")
-	log.Fatal(http.ListenAndServe(config.ServeAt, nil))
+		w.WriteHeader(200)
+	}
 }
 
-// Config defines the configuration needed to run the thermostat.
-type Config struct {
-	thermostat.Config
-	ServeAt string `json:"serveAt"`
+func CORSFilterFactory(handler func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Add("Access-Control-Allow-Methods", "GET,POST")
+		w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTION" {
+			w.WriteHeader(200)
+			return
+		}
+
+		handler(w, r)
+	}
 }

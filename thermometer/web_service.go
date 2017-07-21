@@ -17,18 +17,12 @@ type JSONWebService struct {
 
 // NewJSONWebService constructs a JSONWebService.
 func NewJSONWebService(endpoint string) (*JSONWebService, error) {
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Add("Accept", "application/json")
 	thermometer := &JSONWebService{client: http.DefaultClient, request: req}
-
-	var resp *http.Response
-	resp, err = thermometer.client.Do(req)
-	if err != nil || resp.StatusCode > 300 {
-		return nil, errors.New("Could not connect to thermometer web service.")
-	}
 
 	return thermometer, nil
 }
@@ -36,10 +30,10 @@ func NewJSONWebService(endpoint string) (*JSONWebService, error) {
 // ReadTemperature calls out to the configured web service to obtain a temperature reading.
 func (meter *JSONWebService) ReadTemperature() (float64, util.TemperatureUnits, error) {
 	resp, err := meter.client.Do(meter.request)
-	defer resp.Body.Close()
 	if err != nil {
 		return 0, util.Celsius, err
 	}
+	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return 0, util.Celsius, err
