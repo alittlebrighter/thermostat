@@ -36,3 +36,7 @@ func (d ThermoDirection) String() string {
 func (d ThermoDirection) MarshalText() (text []byte, err error) {
 	return []byte(d.String()), nil
 }
+
+type Config struct {
+	Pins struct{ Fan, Cool, Heat int }
+}

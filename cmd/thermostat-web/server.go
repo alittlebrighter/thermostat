@@ -20,11 +20,11 @@ func main() {
 
 	config, err := readState(DEFAULT_CONFIG)
 	if err != nil {
-		panic(err)
+		log.Fatalln(err.Error())
 	}
 
 	log.Println("Setting up controller.")
-	control, err := controller.NewCentralController(config.Controller.Pins.Heat, config.Controller.Pins.Cool, config.Controller.Pins.Fan)
+	control, err := controller.NewCentralController(config.Controller.Pins.Heat, config.Controller.Pins.Cool, config.Controller.Pins.Fan, 1*time.Minute)
 	if err != nil {
 		log.Fatalln("Error starting controller: " + err.Error())
 	}

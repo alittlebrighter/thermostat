@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"log"
 	"time"
 
 	"github.com/stianeikeland/go-rpio"
@@ -15,13 +16,14 @@ const (
 type CentralController struct {
 	fan, heat, cool rpio.Pin
 
-	fanCoolingDown bool
-	fanCancel      chan bool
-	direction      ThermoDirection
+	fanCoolingDown  bool
+	fanCooldownTime time.Duration
+	fanCancel       chan bool
+	direction       ThermoDirection
 }
 
 // NewCentralController initializes the controller for a central HVAC system.
-func NewCentralController(heatPin int, coolPin int, fanPin int) (*CentralController, error) {
+func NewCentralController(heatPin, coolPin, fanPin int, fanCooldown time.Duration) (*CentralController, error) {
 	err := rpio.Open()
 	if err != nil {
 		return nil, err
@@ -30,9 +32,14 @@ func NewCentralController(heatPin int, coolPin int, fanPin int) (*CentralControl
 	c := new(CentralController)
 	c.direction = None
 
+	log.Printf("Using pin %d to control HEAT.", heatPin)
 	c.heat = rpio.Pin(heatPin)
+	log.Printf("Using pin %d to control AC.", coolPin)
 	c.cool = rpio.Pin(coolPin)
+	log.Printf("Using pin %d to control FAN.", fanPin)
 	c.fan = rpio.Pin(fanPin)
+	log.Printf("Setting FAN cooldown time to %v.", fanCooldown)
+	c.fanCooldownTime = fanCooldown
 
 	c.heat.Output()
 	c.cool.Output()
@@ -55,7 +62,7 @@ func (c *CentralController) Direction() ThermoDirection {
 func (c *CentralController) fanCooldown() {
 	c.fanCoolingDown = true
 
-	timer := time.NewTimer(1 * time.Minute)
+	timer := time.NewTimer(c.fanCooldownTime)
 	select {
 	case <-timer.C:
 	case <-c.fanCancel:

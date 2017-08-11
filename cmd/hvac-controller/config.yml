@@ -1,0 +1,7 @@
+---
+pins:
+  fan: 21
+  cool: 20
+  heat: 16
+fanCooldown: 10s
+serveAt: "0.0.0.0:9000"
