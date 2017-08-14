@@ -19,11 +19,11 @@ import (
 const DEFAULT_CONFIG = "/etc/thermostat.conf"
 
 func main() {
-	configFile := flag.String("conf", DEFAULT_CONFIG, "The configuration file for the controller.")
+	configFile := flag.String("config", DEFAULT_CONFIG, "The configuration file for the controller.")
 	flag.Parse()
 
 	if err := rpio.Open(); err != nil {
-		log.Fatalln("ERROR: Can't open GPIOs. " + err.Error())
+		log.Fatalln("ERROR: Can't open GPIOs.\n" + err.Error())
 	}
 
 	data, err := ioutil.ReadFile(*configFile)
@@ -52,8 +52,9 @@ func main() {
 
 	appCtx := &appContext{control}
 
-	http.HandleFunc("/heat", appCtx.Heat)
-	http.HandleFunc("/cool", appCtx.Cool)
+	http.HandleFunc("/heat", appCtx.controlElement("HEAT", appCtx.hvacControl.Heat))
+	http.HandleFunc("/cool", appCtx.controlElement("AC", appCtx.hvacControl.Cool))
+	http.HandleFunc("/fan", appCtx.controlElement("FAN", appCtx.hvacControl.Fan))
 
 	log.Println("Starting web server at " + config.ServeAt)
 	log.Fatal(http.ListenAndServe(config.ServeAt, nil))
@@ -63,63 +64,37 @@ type appContext struct {
 	hvacControl controller.Controller
 }
 
-func (appCtx *appContext) Heat(w http.ResponseWriter, r *http.Request) {
-	resp := new(response)
+func (appCtx *appContext) controlElement(elementName string, turnOn func()) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp := new(response)
 
-	if strings.ToUpper(r.Method) == http.MethodPost {
-		command := &response{Errors: []string{}}
-		err := json.NewDecoder(r.Body).Decode(command)
-		switch {
-		case err != nil:
-			log.Println("ERROR: " + err.Error())
-			resp.Errors = append(resp.Errors, err.Error())
-		case command.ElementOn:
-			log.Println("Turning HEAT ON.")
-			appCtx.hvacControl.Heat()
-		case !command.ElementOn:
-			log.Println("Turning HEAT OFF.")
-			appCtx.hvacControl.Off()
+		if strings.ToUpper(r.Method) == http.MethodPost {
+			command := &response{Errors: []string{}}
+			err := json.NewDecoder(r.Body).Decode(command)
+			switch {
+			case err != nil:
+				log.Println("ERROR: " + err.Error())
+				resp.Errors = append(resp.Errors, err.Error())
+			case command.ElementOn:
+				log.Println("Turning " + elementName + " ON.")
+				turnOn()
+			case !command.ElementOn:
+				log.Println("Turning " + elementName + " OFF.")
+				appCtx.hvacControl.Off()
+			}
 		}
-	}
 
-	resp.ElementOn = appCtx.hvacControl.Direction() == controller.Heating
+		resp.ElementOn = appCtx.hvacControl.Direction() == controller.Heating
 
-	w.WriteHeader(http.StatusOK)
-	err := json.NewEncoder(w).Encode(resp)
-	if err != nil {
-		log.Println("ERROR: " + err.Error())
+		w.WriteHeader(http.StatusOK)
+		err := json.NewEncoder(w).Encode(resp)
+		if err != nil {
+			log.Println("ERROR: " + err.Error())
+		}
 	}
 }
 
-func (appCtx *appContext) Cool(w http.ResponseWriter, r *http.Request) {
-	resp := new(response)
-
-	if strings.ToUpper(r.Method) == http.MethodPost {
-		command := &response{Errors: []string{}}
-		err := json.NewDecoder(r.Body).Decode(command)
-		switch {
-		case err != nil:
-			log.Println("ERROR: " + err.Error())
-			resp.Errors = append(resp.Errors, err.Error())
-		case command.ElementOn:
-			log.Println("Turning AC ON.")
-			appCtx.hvacControl.Cool()
-		case !command.ElementOn:
-			log.Println("Turning AC OFF.")
-			appCtx.hvacControl.Off()
-		}
-	}
-
-	resp.ElementOn = appCtx.hvacControl.Direction() == controller.Heating
-
-	w.WriteHeader(http.StatusOK)
-	err := json.NewEncoder(w).Encode(resp)
-	if err != nil {
-		log.Println("ERROR: " + err.Error())
-	}
-}
-
-func appCtx *appContext) Shutdown(w http.ResponseWriter, r *http.Request) {
+func (appCtx *appContext) Shutdown(w http.ResponseWriter, r *http.Request) {
 	if strings.ToUpper(r.Method) == http.MethodPost {
 		appCtx.hvacControl.Shutdown()
 		os.Exit(0)
