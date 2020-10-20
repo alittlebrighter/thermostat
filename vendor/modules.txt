@@ -1,0 +1,17 @@
+# github.com/alittlebrighter/embd v1.0.0
+## explicit
+github.com/alittlebrighter/embd
+github.com/alittlebrighter/embd/host/generic
+github.com/alittlebrighter/embd/host/rpi
+github.com/alittlebrighter/embd/sensor/mcp9808
+# github.com/ghodss/yaml v1.0.0
+## explicit
+github.com/ghodss/yaml
+# github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
+github.com/golang/glog
+# github.com/stianeikeland/go-rpio v4.2.0+incompatible
+## explicit
+github.com/stianeikeland/go-rpio
+# gopkg.in/yaml.v2 v2.3.0
+## explicit
+gopkg.in/yaml.v2
