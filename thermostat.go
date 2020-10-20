@@ -154,6 +154,7 @@ func (stat *Thermostat) Run(cancel <-chan bool) {
 	temp, units, err := stat.thermometer.ReadTemperature()
 	if err != nil {
 		log.Println("Error reading Temperature: " + err.Error())
+		stat.Events.Add(&util.EventLog{AmbientTemperature: -1, Units: stat.UnitPreference, Direction: stat.control.Direction()})
 		stat.HandleError()
 	} else {
 		stat.ProcessTemperatureReading(temp, units)
@@ -166,6 +167,7 @@ func (stat *Thermostat) Run(cancel <-chan bool) {
 			temp, units, err := stat.thermometer.ReadTemperature()
 			if err != nil {
 				log.Println("Error reading Temperature: " + err.Error())
+				stat.Events.Add(&util.EventLog{AmbientTemperature: -1, Units: stat.UnitPreference, Direction: stat.control.Direction()})
 				stat.HandleError()
 				continue
 			}
