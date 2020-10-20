@@ -104,8 +104,6 @@ func ConfigHandlerFactory(thermostatMain *thermostat.Thermostat, config *Config,
 			fmt.Fprintf(w, "ERROR: could not marshal thermostat struct.")
 			return
 		}
-
-		w.WriteHeader(200)
 	}
 }
 
@@ -115,7 +113,7 @@ func CORSFilterFactory(handler func(http.ResponseWriter, *http.Request)) func(ht
 		w.Header().Add("Access-Control-Allow-Methods", "GET,POST")
 		w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
 
-		if r.Method == "OPTION" {
+		if r.Method == http.MethodOptions {
 			w.WriteHeader(200)
 			return
 		}
