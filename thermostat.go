@@ -1,6 +1,8 @@
 package thermostat
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -9,6 +11,8 @@ import (
 	tmeter "github.com/alittlebrighter/thermostat/thermometer"
 	"github.com/alittlebrighter/thermostat/util"
 )
+
+var ErrTempReading = errors.New("could not read temperature")
 
 type Config struct {
 	Thermostat  *Thermostat
@@ -22,11 +26,12 @@ type Thermostat struct {
 	DefaultMode           string                `json:"defaultMode"`
 	Schedule              []*ScheduleEvent      `json:"schedule"`
 	Overshoot             float64               `json:"overshoot"`
-	PollInterval          util.Duration         `json:"pollInterval"`
-	MinFan                util.Duration         `json:"minFan"`
+	PollInterval          time.Duration         `json:"pollInterval"`
+	MinFan                time.Duration         `json:"minFan"`
 	LastFan               time.Time             `json:"lastFan"`
 	MaxErrors, errorCount uint8                 `json:"maxErrors"`
 	UnitPreference        util.TemperatureUnits `json:"unitPreference"`
+
 	control               controller.Controller
 	thermometer           tmeter.Thermometer
 	Events                *util.RingBuffer `json:"events"`
@@ -104,37 +109,50 @@ func (stat *Thermostat) ProcessTemperatureReading(ambientTemp float64, units uti
 		temp = ambientTemp
 	}
 
-	window := stat.CurrentTemperatureWindow(time.Now())
+	now := time.Now()
 
-	log.Printf("Current Temperature (%s): %f, Target: %f to %f", stat.UnitPreference, temp, window.LowTemp, window.HighTemp)
+	window := stat.CurrentTemperatureWindow(now)
+
+	log.Printf("Current Temperature (%s): %f, Target: %f to %f, Last Fan: %v",
+		stat.UnitPreference,
+		temp,
+		window.LowTemp,
+		window.HighTemp,
+		stat.LastFan.Local().Format(time.RFC3339),
+	)
 	switch {
 	case (stat.control.Direction() == controller.Heating && temp > window.LowTemp+stat.Overshoot) /* done heating */ ||
 		(stat.control.Direction() == controller.Cooling && temp < window.HighTemp-stat.Overshoot) /* done cooling */ ||
 		(time.Duration(stat.MinFan).Nanoseconds() > 0 &&
 			stat.control.Direction() == controller.Fan &&
 			time.Since(stat.LastFan) > 0 &&
-			time.Since(stat.LastFan) <= (time.Duration(1)*time.Hour)-time.Duration(stat.MinFan)) /* done running fan */ :
+			time.Since(stat.LastFan) <= (time.Duration(1)*time.Hour)-stat.MinFan) /* done running fan */ :
 		log.Println("turning OFF")
 		stat.control.Off()
-		stat.LastFan = time.Now()
+		stat.LastFan = now
 	case temp < window.LowTemp:
 		log.Println("turning on HEAT")
 		stat.control.Heat()
-		stat.LastFan = time.Now()
+		stat.LastFan = now
 	case temp > window.HighTemp:
 		log.Println("turning on COOL")
 		stat.control.Cool()
-		stat.LastFan = time.Now()
+		stat.LastFan = now
 	case time.Duration(stat.MinFan).Nanoseconds() > 0 &&
-		time.Since(stat.LastFan) > (time.Duration(1)*time.Hour)-time.Duration(stat.MinFan):
+		time.Since(stat.LastFan) > (time.Duration(1)*time.Hour)-stat.MinFan:
 		log.Println("turning on FAN")
 		stat.control.Fan()
-		stat.LastFan = time.Now().Add(time.Duration(stat.MinFan))
+		stat.LastFan = now.Add(time.Duration(stat.MinFan))
 	default:
 		log.Println("doing NOTHING")
 	}
 
-	stat.Events.Add(&util.EventLog{AmbientTemperature: temp, Units: stat.UnitPreference, Direction: stat.control.Direction()})
+	stat.Events.Add(&util.EventLog{
+		AmbientTemperature: temp,
+		Units:              stat.UnitPreference,
+		Direction:          stat.control.Direction(),
+		Timestamp:          time.Now(),
+	})
 }
 
 // HandleError manages errors received from temperature readings to make sure the system does not stay on in the event of
@@ -149,7 +167,7 @@ func (stat *Thermostat) HandleError() {
 }
 
 // Run starts the main event loop to run the thermostat.
-func (stat *Thermostat) Run(cancel <-chan bool) {
+func (stat *Thermostat) Run(ctx context.Context) {
 	// we want to do something right away
 	temp, units, err := stat.thermometer.ReadTemperature()
 	if err != nil {
@@ -164,6 +182,11 @@ func (stat *Thermostat) Run(cancel <-chan bool) {
 	for {
 		select {
 		case <-ticker.C:
+			lastEvent := stat.Events.GetLast()
+			if lastEvent != nil && time.Now().Add(time.Duration(-1)*stat.PollInterval).Before(lastEvent.Timestamp) {
+				continue
+			}
+
 			temp, units, err := stat.thermometer.ReadTemperature()
 			if err != nil {
 				log.Println("Error reading Temperature: " + err.Error())
@@ -172,7 +195,7 @@ func (stat *Thermostat) Run(cancel <-chan bool) {
 				continue
 			}
 			stat.ProcessTemperatureReading(temp, units)
-		case <-cancel:
+		case <-ctx.Done():
 			return
 		}
 	}

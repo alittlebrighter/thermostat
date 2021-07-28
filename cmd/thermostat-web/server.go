@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,16 +11,39 @@ import (
 
 	"github.com/alittlebrighter/thermostat"
 	"github.com/alittlebrighter/thermostat/controller"
+	"github.com/alittlebrighter/thermostat/models"
 	"github.com/alittlebrighter/thermostat/thermometer"
 	"github.com/alittlebrighter/thermostat/util"
+	nats "github.com/nats-io/nats.go"
 )
 
-const DEFAULT_CONFIG = "/etc/thermostat.conf"
+const (
+	natsSub = "otto.sensor.temperature.current"
+)
+
+var (
+	ConfigPath         = "/etc/thermostat.conf"
+	ThermometerSvcName = "thermometer"
+	natsURL            = nats.DefaultURL
+)
 
 func main() {
+	flag.StringVar(&ConfigPath, "config", ConfigPath, "Path to the configuration file to use.")
+	flag.StringVar(&ThermometerSvcName, "thermometerSvc", ThermometerSvcName, "mDNS service name for the thermometer.")
+	flag.StringVar(&natsURL, "natsUrl", natsURL, "Url for NATS instance to connect to.")
+	flag.Parse()
+
 	log.Println("Starting thermostat.")
 
-	config, err := readState(DEFAULT_CONFIG)
+	/*
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		log.Println("Could not connect to message bus.")
+	}
+	defer nc.Close()
+	log.Println("Connected to NATS.")
+	*/
+	config, err := readState(ConfigPath)
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
@@ -32,12 +57,12 @@ func main() {
 	defer control.Shutdown()
 	defer control.Off()
 
-	log.Println("Getting thermometer.")
 	thermometer, err := thermometer.NewRemote(config.Thermometer.Endpoint)
 	if err != nil {
 		log.Fatalln("Error getting thermometer instance: " + err.Error())
 	}
 	defer thermometer.Shutdown()
+	log.Println("Got thermometer at " + config.Thermometer.Endpoint)
 
 	log.Println("Initializing thermostat.")
 	thermostatMain := config.Thermostat
@@ -50,11 +75,24 @@ func main() {
 	thermostatMain.SetController(control)
 	thermostatMain.SetThermometer(thermometer)
 
-	cancel := make(chan bool)
-	defer close(cancel)
-	go thermostatMain.Run(cancel)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
+	thermostatMain.Run(ctx) // fires a goroutine
+	/*
+	nc.Subscribe(natsSub, func(m *nats.Msg) {
+		update := new(models.SensorUpdate)
+		if err := json.Unmarshal(m.Data, update); err != nil {
+			log.Println("could not parse update from NATS")
+		}
+
+		log.Println("got update from NATS: value:", update.Value)
+		thermostatMain.ProcessTemperatureReading(update.Value.Degrees, update.Value.Unit)
+	})
+	*/
+	
 	http.HandleFunc("/", CORSFilterFactory(ConfigHandlerFactory(thermostatMain, config, cancel)))
+	http.HandleFunc()
 
 	log.Println("Starting web server.")
 	log.Fatal(http.ListenAndServe(config.ServeAt, nil))
@@ -94,8 +132,8 @@ func ConfigHandlerFactory(thermostatMain *thermostat.Thermostat, config *Config,
 			thermostatMain.UnitPreference = newThermostat.UnitPreference
 
 			cancel <- true
-			go thermostatMain.Run(cancel)
-			go saveState(DEFAULT_CONFIG, config)
+			thermostatMain.Run(cancel)
+			go saveState(ConfigPath, config)
 		}
 
 		err := json.NewEncoder(w).Encode(thermostatMain)

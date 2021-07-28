@@ -1,7 +1,7 @@
 ---
 thermostat:
   defaultMode: default
-  maxErrors: 3
+  maxErrors: 3 # when reached all HVAC components are shut off
   modes:
     default:
       high: 80
@@ -13,24 +13,24 @@ thermostat:
   pollInterval: 1m # minutes
   minFan: 5m # minutes/hour
   schedule:
-  - days:
-    - 1
-    - 2
-    - 3
-    - 4
-    - 5
-    end: 7:00AM
-    mode: night
-    start: 12:01AM
-  - days:
-    - 1
-    - 2
-    - 3
-    - 4
-    - 5
-    end: 12:00AM
-    mode: night
-    start: 11:00PM
+    - days:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+      end: 7:00AM
+      mode: night
+      start: 12:00AM
+    - days:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+      end: 12:00AM
+      mode: night
+      start: 11:00PM
   unitPreference: Fahrenheit
 controller:
   pins:

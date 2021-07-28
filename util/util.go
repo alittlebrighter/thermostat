@@ -56,6 +56,7 @@ type EventLog struct {
 	AmbientTemperature float64                    `json:"ambientTemperature"`
 	Units              TemperatureUnits           `json:"units"`
 	Direction          controller.ThermoDirection `json:"direction"`
+	Timestamp          time.Time
 }
 
 type RingBuffer struct {
@@ -89,33 +90,4 @@ func (buf *RingBuffer) GetLast() *EventLog {
 
 func (buf *RingBuffer) MarshalJSON() ([]byte, error) {
 	return json.Marshal(buf.GetAll())
-}
-
-// pulled from https://github.com/influxdata/influxdb/blob/master/toml/toml.go
-type Duration time.Duration
-
-// String returns the string representation of the duration.
-func (d Duration) String() string {
-	return time.Duration(d).String()
-}
-
-func (d *Duration) UnmarshalText(text []byte) error {
-	// Ignore if there is no value set.
-	if len(text) == 0 {
-		return nil
-	}
-
-	// Otherwise parse as a duration formatted string.
-	duration, err := time.ParseDuration(string(text))
-	if err != nil {
-		return err
-	}
-
-	// Set duration and return.
-	*d = Duration(duration)
-	return nil
-}
-
-func (d Duration) MarshalText() (text []byte, err error) {
-	return []byte(d.String()), nil
 }
